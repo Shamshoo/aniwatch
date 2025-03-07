@@ -3,8 +3,10 @@
   "name": "AniWatch",
   "type": "online-streaming",
   "version": "1.0.0",
+  "language": "EN",
   "author": "Shamshoo",
   "description": "AniWatch.to streaming provider for Seanime",
-  "language": "EN",
-  "main": "index.js"
+  "repository": "https://github.com/Shamshoo/aniwatch",
+  "main": "index.js",
+  "icon": "https://aniwatchtv.to/favicon.ico"
 }
