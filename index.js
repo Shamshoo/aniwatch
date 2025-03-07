@@ -1,11 +1,4 @@
-/**
- * @name AniWatch
- * @id aniwatch
- * @type online-streaming
- * @version 1.0.0
- * @author Shamshoo
- * @description AniWatch.to streaming provider for Seanime
- */
+/// <reference path="./online-streaming-provider.d.ts" />
 
 class Provider {
     api = "https://aniwatchtv.to"
@@ -17,12 +10,12 @@ class Provider {
         }
     }
 
-    async search(opts: SearchOptions): Promise<SearchResult[]> {
-        console.log("Search query:", opts.query)
+    async search(query: string): Promise<SearchResult[]> {
+        console.log("Search query:", query)
         
         try {
             // AniWatch uses a different search URL structure
-            const response = await fetch(`${this.api}/search?keyword=${encodeURIComponent(opts.query)}`)
+            const response = await fetch(`${this.api}/search?keyword=${encodeURIComponent(query)}`)
             console.log("Response status:", response.status)
             
             const html = await response.text()
@@ -47,8 +40,8 @@ class Provider {
                     results.push({
                         id: url, // Use the full URL path as the ID
                         title: title,
-                        url: url,
-                        subOrDub: "sub", // Default to sub, can refine with more parsing
+                        url: this.api + url,
+                        subOrDub: "both" // Default to both, can refine with more parsing
                     })
                 }
             }
@@ -98,9 +91,9 @@ class Provider {
                     
                     episodes.push({
                         id: episodeLink,
-                        url: episodeLink,
+                        url: this.api + episodeLink,
                         number: episodeNumber,
-                        title: `EP ${episodeNumber}`
+                        title: `Episode ${episodeNumber}`
                     })
                 }
             }
@@ -113,16 +106,16 @@ class Provider {
         }
     }
 
-    async findEpisodeServer(id: string): Promise<ServerInfo[]> {
-        console.log("Finding servers for episode:", id)
+    async findEpisodeServer(episodeId: string, server?: string): Promise<EpisodeServer> {
+        console.log("Finding servers for episode:", episodeId, "server:", server)
         
         try {
             // Make sure the ID is a proper URL path
-            if (id && !id.startsWith('/')) {
-                id = '/' + id
+            if (episodeId && !episodeId.startsWith('/')) {
+                episodeId = '/' + episodeId
             }
             
-            const url = `${this.api}${id}`
+            const url = `${this.api}${episodeId}`
             console.log("Fetching URL:", url)
             
             const response = await fetch(url)
@@ -131,81 +124,68 @@ class Provider {
             const html = await response.text()
             console.log("HTML length:", html.length)
             
-            const servers: ServerInfo[] = []
+            // Extract server data-id
+            // We'll focus on finding server matching the requested server name, or the first one if none specified
+            const serverMatch = server 
+                ? html.match(new RegExp(`<div class="server-item[^>]*>\\s*<a[^>]*data-id="([^"]*)"[^>]*>${server}</a>`, 'i'))
+                : html.match(/<div class="server-item[^>]*>\s*<a[^>]*data-id="([^"]*)"[^>]*>/);
             
-            // Extract server data-id and server names
-            const serverMatches = html.match(/<div class="server-item[^>]*>\s*<a[^>]*data-id="([^"]*)"[^>]*>([^<]*)<\/a>/g) || []
-            
-            console.log("Found servers:", serverMatches.length)
-            
-            for (const serverItem of serverMatches) {
-                const idMatch = serverItem.match(/data-id="([^"]*)"/)
-                const nameMatch = serverItem.match(/<a[^>]*>([^<]*)<\/a>/)
-                
-                if (idMatch && nameMatch) {
-                    const serverId = idMatch[1]
-                    const serverName = nameMatch[1].trim()
-                    
-                    servers.push({
-                        name: serverName.toLowerCase(),
-                        extraData: {
-                            serverId: serverId,
-                            episodeId: id
-                        }
-                    })
+            if (!serverMatch) {
+                console.error("No matching server found")
+                return {
+                    server: "default",
+                    headers: {},
+                    videoSources: []
                 }
             }
             
-            console.log("Final server count:", servers.length)
-            return servers
-        } catch (error) {
-            console.error("Find episode server error:", error)
-            return []
-        }
-    }
-    
-    async findEpisodeSource(episodeId: string, server: string, extraData?: any): Promise<EpisodeSource> {
-        console.log("Finding source for episode:", episodeId, "server:", server, "extraData:", extraData)
-        
-        try {
-            if (!extraData || !extraData.serverId) {
-                console.error("Missing server ID in extraData")
-                return { sources: [] }
-            }
+            const serverId = serverMatch[1]
+            console.log("Found server ID:", serverId)
             
             // AniWatch typically uses an AJAX endpoint to fetch video sources
-            // Adjust this URL based on actual site structure
-            const sourceUrl = `${this.api}/ajax/server/${extraData.serverId}`
-            console.log("Source URL:", sourceUrl)
+            const sourceUrl = `${this.api}/ajax/v2/episode/sources?id=${serverId}`
             
-            const response = await fetch(sourceUrl, {
-                method: "GET",
+            const sourceResponse = await fetch(sourceUrl, {
                 headers: {
                     "X-Requested-With": "XMLHttpRequest",
-                    "Referer": `${this.api}${extraData.episodeId}`
+                    "Referer": url
                 }
             })
             
-            const data = await response.json()
-            console.log("Source data received")
+            const sourceData = await sourceResponse.json()
             
-            if (!data || !data.link) {
+            if (!sourceData || !sourceData.link) {
                 console.error("No video link found in response")
-                return { sources: [] }
+                return {
+                    server: server || "default",
+                    headers: {},
+                    videoSources: []
+                }
             }
             
-            // For many sites like AniWatch, the returned link is often an iframe URL
-            // You might need to extract the actual video source from this iframe
+            // For AniWatch, the returned link is often an iframe URL or m3u8 link
+            const videoUrl = sourceData.link
+            const isM3U8 = videoUrl.includes('.m3u8')
+            
             return {
-                sources: [{
-                    url: data.link,
-                    isM3U8: data.link.includes('.m3u8')
+                server: server || "default",
+                headers: {
+                    "Referer": this.api
+                },
+                videoSources: [{
+                    url: videoUrl,
+                    type: isM3U8 ? "m3u8" : "mp4",
+                    quality: "auto",
+                    subtitles: []
                 }]
             }
         } catch (error) {
-            console.error("Find episode source error:", error)
-            return { sources: [] }
+            console.error("Find episode server error:", error)
+            return {
+                server: server || "default",
+                headers: {},
+                videoSources: []
+            }
         }
     }
 }
-module.exports = Provider;
