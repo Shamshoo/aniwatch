@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "type": "onlinestream-provider",
   "manifestURI": "https://raw.githubusercontent.com/Shamshoo/aniwatch/refs/heads/main/manifest.json",
-  "language": "javascript",
+  "language": "typescript",
   "author": "Shamshoo",
   "meta": {
     "website": "https://aniwatchtv.to"
