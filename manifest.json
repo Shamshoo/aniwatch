@@ -2,7 +2,7 @@
   "id": "shamshoo-aniwatch-provider",
   "name": "AniWatch",
   "description": "Online anime streaming provider",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "onlinestream-provider",
   "manifestURI": "https://raw.githubusercontent.com/Shamshoo/aniwatch/refs/heads/main/manifest.json",
   "language": "typescript",
